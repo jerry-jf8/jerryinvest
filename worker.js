@@ -108,8 +108,7 @@ async function handleBatch(symbols) {
 // ── 访问码配置 ──────────────────────────────────────────────────────────────
 // 访问码以 HMAC-SHA256 形式验证，避免明文对比被轻易破解
 // 前端传来的是 HMAC(fingerprint + date, ACCESS_CODE_RAW)
-// 这里的 raw 值只在 Worker 里存在，前端永远看不到
-const ACCESS_CODE_RAW = 'XXXX';
+// raw 值从 Cloudflare Secret: ACCESS_CODE_RAW 读取，不写死在代码里
 
 // 基础限额（无访问码）
 const LIMITS      = { DAILY_GLOBAL: 60, PER_IP_DAILY: 2 };    // ✨ AI评价
@@ -128,12 +127,15 @@ async function hashIp(ip) {
 }
 
 // 验证前端传来的 access_token（HMAC-SHA256）
-async function verifyAccessToken(token) {
+async function verifyAccessToken(token, env) {
   if (!token || typeof token !== 'string') return false;
+
+  const rawCode = env?.ACCESS_CODE_RAW;
+  if (!rawCode) return false;
+
   try {
-    // 前端用 HMAC(date_string, ACCESS_CODE_RAW) 生成 token
     const today = todayKey();
-    const keyData = new TextEncoder().encode(ACCESS_CODE_RAW);
+    const keyData = new TextEncoder().encode(rawCode);
     const msgData = new TextEncoder().encode(today);
     const key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const sig = await crypto.subtle.sign('HMAC', key, msgData);
@@ -155,7 +157,7 @@ function cleanupCounters() {
   }
 }
 
-async function checkRateLimit(request) {
+async function checkRateLimit(request, env) {
   const today = todayKey();
   const globalKey = `global:${today}`;
   if (getCount(globalKey) >= LIMITS.DAILY_GLOBAL) {
@@ -170,7 +172,7 @@ async function checkRateLimit(request) {
   try {
     const cloned = request.clone();
     const body = await cloned.json();
-    isVip = await verifyAccessToken(body?.access_token);
+    isVip = await verifyAccessToken(body?.access_token, env);
   } catch (e) {}
   const perIpLimit = isVip ? LIMITS_VIP.PER_IP_DAILY : LIMITS.PER_IP_DAILY;
 
@@ -190,7 +192,7 @@ async function checkRateLimit(request) {
 }
 
 // 大师会诊专用限流（每人每天 2 次，访问码后 10 次）
-async function checkGuruRateLimit(request) {
+async function checkGuruRateLimit(request, env) {
   const today = todayKey();
   const globalKey = `guru_global:${today}`;
   if (getCount(globalKey) >= GURU_LIMITS.DAILY_GLOBAL) {
@@ -204,7 +206,7 @@ async function checkGuruRateLimit(request) {
   try {
     const cloned = request.clone();
     const body = await cloned.json();
-    isVip = await verifyAccessToken(body?.access_token);
+    isVip = await verifyAccessToken(body?.access_token, env);
   } catch (e) {}
   const perIpLimit = isVip ? GURU_LIMITS_VIP.PER_IP_DAILY : GURU_LIMITS.PER_IP_DAILY;
 
@@ -457,7 +459,7 @@ async function handleAiGenerate(request, env) {
     method: request.method, headers: request.headers,
     body: JSON.stringify(body),
   });
-  const limit = await checkRateLimit(reqForLimit);
+  const limit = await checkRateLimit(reqForLimit, env);
   if (!limit.ok) {
     return jsonResponse({ error: limit.reason, remaining: limit.remaining, needCode: !!limit.needCode }, 429);
   }
@@ -488,7 +490,7 @@ async function handleGuruAnalysis(request, env) {
     method: request.method, headers: request.headers,
     body: JSON.stringify(body),
   });
-  const limit = await checkGuruRateLimit(reqForLimit);
+  const limit = await checkGuruRateLimit(reqForLimit, env);
   if (!limit.ok) {
     return jsonResponse({ error: limit.reason, remaining: limit.remaining, needCode: !!limit.needCode }, 429);
   }
@@ -552,8 +554,8 @@ const STOCK_NAMES_MAP = {
 function detectEmailType(scheduledTime) {
   const h = scheduledTime.getUTCHours();
   const m = scheduledTime.getUTCMinutes();
-  const dow = scheduledTime.getUTCDay(); // 0=Sun,5=Fri
-  // 周报：周五 UTC 04:30 = 美东 00:30（夏令时）
+  const dow = scheduledTime.getUTCDay(); // 0=Sun,6=Sat
+  // 周报：周六 UTC 11:00 = 美东周六 07:00（夏令时）
   if (dow === 6 && h === 11 && m === 0) return 'weekly';
   // 盘前：美东 09:15 = UTC 13:15（夏令时）
   if ((h === 13 || h === 14) && m === 15) return 'preopen';
@@ -1111,6 +1113,7 @@ export default {
         models: { push: MODEL_HAIKU, aiGenerate: MODEL_SONNET, guruAnalysis: MODEL_SONNET },
         promptCaching: true,
         aiConfigured: !!env?.ANTHROPIC_API_KEY,
+        accessCodeConfigured: !!env?.ACCESS_CODE_RAW,
         pushConfigured: !!env?.PUSHPLUS_TOKEN,
         pushTopicConfigured: !!env?.PUSHPLUS_TOPIC,
         emailConfigured: !!(env?.RESEND_API_KEY && env?.EMAIL_FROM && env?.EMAIL_RECIPIENTS),
