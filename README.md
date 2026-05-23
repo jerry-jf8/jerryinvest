@@ -58,6 +58,7 @@ worker.js     后端 Worker，部署到 Cloudflare
 | `RESEND_API_KEY` | Resend API Key |
 | `EMAIL_FROM` | 发件人地址（需在 Resend 验证） |
 | `EMAIL_RECIPIENTS` | 收件人地址，多个用逗号分隔 |
+| `ACCESS_CODE_RAW` | 多次调用密码 |
 
 ### 3. 配置前端后端地址
 打开页面 → 右上角 ⚙ 设置 → 填入你的 Worker 地址。
