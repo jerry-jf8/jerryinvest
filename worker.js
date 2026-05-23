@@ -109,7 +109,7 @@ async function handleBatch(symbols) {
 // 访问码以 HMAC-SHA256 形式验证，避免明文对比被轻易破解
 // 前端传来的是 HMAC(fingerprint + date, ACCESS_CODE_RAW)
 // 这里的 raw 值只在 Worker 里存在，前端永远看不到
-const ACCESS_CODE_RAW = 'XXX';
+const ACCESS_CODE_RAW = 'XXXX';
 
 // 基础限额（无访问码）
 const LIMITS      = { DAILY_GLOBAL: 60, PER_IP_DAILY: 2 };    // ✨ AI评价
@@ -554,7 +554,7 @@ function detectEmailType(scheduledTime) {
   const m = scheduledTime.getUTCMinutes();
   const dow = scheduledTime.getUTCDay(); // 0=Sun,5=Fri
   // 周报：周五 UTC 04:30 = 美东 00:30（夏令时）
-  if (dow === 5 && h === 4 && m === 30) return 'weekly';
+  if (dow === 6 && h === 11 && m === 0) return 'weekly';
   // 盘前：美东 09:15 = UTC 13:15（夏令时）
   if ((h === 13 || h === 14) && m === 15) return 'preopen';
   // 开盘后 1h：美东 10:30 = UTC 14:30
@@ -977,7 +977,7 @@ function buildEmailHtml(emailData, aiContent, emailType) {
       <h2 style="font-size:18px;color:#0f172a;margin:22px 0 4px;">自选股</h2>
       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${stocksHtml}</table>
       ${extraHtml}
-      <div style="margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;color:#94A3B8;font-size:11px;line-height:1.8;">🐼 <strong style="color:#C04018;">Jerry Fang 投研</strong> · AI-Powered Stock Dashboard<br>Built with Claude AI · Cloudflare Workers · Yahoo Finance<br>© 2026 Jerry Fang · 行情仅供参考，非投资建议</div>
+      <div style="margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;color:#94A3B8;font-size:11px;line-height:1.8;">🐼 <strong style="color:#C04018;">Jerry Fang 投研</strong> · AI-Powered Stock Dashboard<br>Built with Claude AI · Cloudflare Workers · Yahoo Finance<br>© 2025 Jerry Fang · 行情仅供参考，非投资建议</div>
     </div>
   </div>
 </body>
@@ -996,7 +996,7 @@ async function sendPushPlus(title, content, env) {
   const topic = env.PUSHPLUS_TOPIC;
   if (!topic) throw new Error('PUSHPLUS_TOPIC 未配置');
 
-  const resp = await fetch('http://www.pushplus.plus/send', {
+  const resp = await fetch('https://www.pushplus.plus/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
